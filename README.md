@@ -1,4 +1,5 @@
 # qwen3_tts_fa2
+<<<<<<< HEAD
 
 這個專案整理了在 Windows 上讓 `Qwen3-TTS` 真正跑通 `FlashAttention2` 的可重現流程。  
 This repository documents a reproducible way to get `Qwen3-TTS` genuinely running with `FlashAttention2` on Windows.
@@ -410,3 +411,6 @@ This repository now packages the build, manual install, launch, and verification
 
 如果你只想操作，先跑 `install_and_build.cmd`，之後平常用 `start_TTS.cmd`，需要停止時用 `stop.cmd`。  
 If you only want the operational path, run `install_and_build.cmd` first, then use `start_TTS.cmd` for normal operation and `stop.cmd` when you want to stop it.
+=======
+windows fa2
+>>>>>>> origin/main
