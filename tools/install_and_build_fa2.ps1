@@ -3,7 +3,7 @@ param(
     [string]$RepoDir = "F:\fa283",
     [string]$FlashAttnVersion = "2.8.3",
     [string]$GpuId = "1",
-    [string]$Checkpoint = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+    [string]$Checkpoint = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
     [switch]$SkipBuild,
     [switch]$Launch
 )

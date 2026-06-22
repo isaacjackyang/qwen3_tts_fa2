@@ -81,7 +81,7 @@ try {
     Write-Log "Environment ready: $envName"
     Write-Log "Run later with:"
     Write-Log "conda activate $envName"
-    Write-Log 'qwen-tts-demo Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice --ip 127.0.0.1 --port 8000 --no-flash-attn'
+    Write-Log 'qwen-tts-demo Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice --ip 127.0.0.1 --port 7100 --no-flash-attn'
     Write-Log "Script completed successfully"
 }
 catch {

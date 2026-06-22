@@ -83,7 +83,7 @@ try {
     Write-Log "Next manual test:"
     Write-Log "conda activate $EnvName"
     Write-Log '$env:CUDA_VISIBLE_DEVICES="1"'
-    Write-Log 'qwen-tts-demo Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice --ip 127.0.0.1 --port 8000'
+    Write-Log 'qwen-tts-demo Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice --ip 127.0.0.1 --port 7100'
 }
 catch {
     Write-Host ""
