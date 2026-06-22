@@ -2,7 +2,7 @@
 setlocal
 
 set "SCRIPT_DIR=%~dp0"
-set "LAUNCH_SCRIPT=%SCRIPT_DIR%tools\start_qwen3_tts_fa2_background.ps1"
+set "LAUNCH_SCRIPT=%SCRIPT_DIR%tools\start_qwen3_asr_tts_suite_background.ps1"
 
 if not exist "%LAUNCH_SCRIPT%" (
     echo Background launch script not found:
@@ -16,7 +16,7 @@ set "EXIT_CODE=%ERRORLEVEL%"
 
 if "%EXIT_CODE%"=="0" (
     echo.
-    echo The background service is now running.
+    echo The ASR + TTS background service is now running.
     echo You can copy the URL above, then press any key to close this window.
     pause >nul
 ) else (

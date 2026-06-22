@@ -1,5 +1,5 @@
 param(
-    [int]$Port = 7100
+    [int]$Port = 7200
 )
 
 $ErrorActionPreference = "Stop"
@@ -7,10 +7,12 @@ $ErrorActionPreference = "Stop"
 $toolsRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $toolsRoot
 $logsDir = Join-Path $projectRoot "logs"
-$stateFile = Join-Path $logsDir "qwen3_tts_state.json"
-$pidFile = Join-Path $logsDir "qwen3_tts.pid"
+$stateFile = Join-Path $logsDir "qwen3_asr_tts_state.json"
+$pidFile = Join-Path $logsDir "qwen3_asr_tts.pid"
 $workerScriptName = "run_qwen3_tts_fa2_background.ps1"
-$startScriptName = "start_qwen3_tts_fa2_test_gpu1.ps1"
+$startScriptName = "start_qwen3_asr_tts_suite.ps1"
+$asrWorkerName = "qwen3_asr_http_worker.py"
+$suiteAppName = "qwen3_asr_tts_suite.py"
 
 function Get-ProcessInfo {
     param([int]$ProcessId)
@@ -82,22 +84,24 @@ if ($targetPids.Count -eq 0) {
         $commandLine = ($processInfo.CommandLine | Out-String).Trim()
         $looksLikeManaged = $commandLine -match [regex]::Escape($workerScriptName) -or
             $commandLine -match [regex]::Escape($startScriptName) -or
-            $commandLine -match "qwen-tts-demo|qwen3-tts-fa2-test"
+            $commandLine -match [regex]::Escape($asrWorkerName) -or
+            $commandLine -match [regex]::Escape($suiteAppName) -or
+            $commandLine -match "qwen3-asr|qwen3-tts-fa2-test"
 
         if ($looksLikeManaged) {
             [void]$targetPids.Add([int]$connection.OwningProcess)
         } else {
             Write-Host "Port $Port is used by PID $($connection.OwningProcess): $name" -ForegroundColor Yellow
-            Write-Host "That process does not look like this Qwen3-TTS launcher, so it was left untouched." -ForegroundColor Yellow
+            Write-Host "That process does not look like this Qwen3 ASR + TTS suite, so it was left untouched." -ForegroundColor Yellow
         }
     }
 }
 
 if ($targetPids.Count -eq 0) {
     $managedProcesses = Get-CimInstance Win32_Process | Where-Object {
-        $_.CommandLine -match [regex]::Escape($workerScriptName) -or
         $_.CommandLine -match [regex]::Escape($startScriptName) -or
-        $_.CommandLine -match "qwen-tts-demo"
+        $_.CommandLine -match [regex]::Escape($asrWorkerName) -or
+        $_.CommandLine -match [regex]::Escape($suiteAppName)
     }
     foreach ($processInfo in $managedProcesses) {
         [void]$targetPids.Add([int]$processInfo.ProcessId)
@@ -106,11 +110,11 @@ if ($targetPids.Count -eq 0) {
 
 if ($targetPids.Count -eq 0) {
     Remove-StateFiles
-    Write-Host "No Qwen3-TTS FA2 background process was found." -ForegroundColor Yellow
+    Write-Host "No Qwen3 ASR + TTS suite background process was found." -ForegroundColor Yellow
     exit 0
 }
 
-Write-Host "Stopping Qwen3-TTS FA2 background processes..." -ForegroundColor Cyan
+Write-Host "Stopping Qwen3 ASR + TTS suite background processes..." -ForegroundColor Cyan
 
 foreach ($processId in $targetPids) {
     $processInfo = Get-ProcessInfo -ProcessId $processId

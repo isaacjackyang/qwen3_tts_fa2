@@ -1,150 +1,168 @@
 # qwen3_tts_fa2
-<<<<<<< HEAD
 
-這個專案整理了在 Windows 上讓 `Qwen3-TTS` 真正跑通 `FlashAttention2` 的可重現流程。  
-This repository documents a reproducible way to get `Qwen3-TTS` genuinely running with `FlashAttention2` on Windows.
+Windows 上復現 Qwen3-TTS + FlashAttention2，並提供可選的 Qwen3-ASR + TTS 統一 Web UI。
 
-README 採用中英雙行格式，每個重點先中文、下一行英文。  
-This README uses a Chinese-first, English-second bilingual layout.
+這份文件以「在另一台機器重新做出同樣功能」為目標，列出模型、環境、啟動路線，以及如何為自己的 GPU 做合適的 `flash-attn` wheel / 安裝件。
 
-## 核心結論
-## Core Takeaway
+## 功能
 
-重點不是單純「安裝一個特殊 wheel」而已。  
-The key is not merely “installing a special wheel.”
+本專案目前有兩條主要路線。
 
-真正能跑通 FA2 的關鍵，是把整條 Windows 相容路線補齊。  
-What makes FA2 actually work is completing the full Windows-compatible path.
+| 路線 | 功能 | 預設模型 | 入口 | URL |
+|---|---|---|---|---|
+| TTS | 文字轉語音 | `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice` | `start_TTS.cmd` | `http://127.0.0.1:7100` |
+| ASR + TTS | 語音轉文字、文字轉語音、ASR -> TTS | ASR: `Qwen/Qwen3-ASR-1.7B`; TTS: `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice` | `start_ASR_TTS.cmd` | `http://127.0.0.1:7200` |
 
-- 自行 source build 出與這台機器相容的 `flash-attn` CUDA 產物。  
-  Source-build `flash-attn` CUDA artifacts that match this machine.
-- 把 `flash_attn/`、`hopper/`、`flash_attn_2_cuda*.pyd` 手動放進 target env。  
-  Manually place `flash_attn/`, `hopper/`, and `flash_attn_2_cuda*.pyd` into the target environment.
-- 補上 `flash_attn-2.8.3.dist-info`，讓 `transformers` 正式判定 FA2 可用。  
-  Add `flash_attn-2.8.3.dist-info` so `transformers` officially recognizes FA2 as available.
-- 啟動前先補好 `torch\\lib`、CUDA `bin`、SoX 路徑。  
-  Add `torch\\lib`, CUDA `bin`, and SoX paths before startup.
-- 用模型層級驗證確認 `model_attn= flash_attention_2`。  
-  Use model-level verification to confirm `model_attn= flash_attention_2`.
+另有 TTS HTTP API：
 
-如果少了其中任何一段，Windows 上通常會變成「能 import，但實際沒跑通」。  
-If any part is missing, Windows often ends up in a state where imports succeed but real FA2 usage does not.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\start_qwen3_tts_http_api.ps1
+```
 
-## 快速開始
-## Quick Start
+預設 API URL 是 `http://127.0.0.1:7101`，端點包含 `/health`、`/synthesize`、`/speakers`、`/languages`。
 
-### 1. 一鍵安裝與建置
-### 1. One-Click Install and Build
+## 推薦硬體與系統
 
-直接執行下面這個入口，它會建立或更新環境、建置或安裝 FA2、再做驗證。  
-Run the entry point below to create or update the environment, build or install FA2, and then verify it.
+目前腳本的預設值是依這台 Windows + NVIDIA CUDA 環境整理出來的。
+
+| 項目 | 預設/已驗證值 |
+|---|---|
+| OS | Windows |
+| Python | `3.12` |
+| CUDA Toolkit | `12.8` |
+| PyTorch | CUDA 12.8 wheel, 例如 `2.10.0+cu128` |
+| FlashAttention | `2.8.3` |
+| GPU arch | 預設 `sm_120` |
+| Conda | `%USERPROFILE%\Miniconda3` |
+| SoX | 需要 `sox.exe` 可被啟動腳本找到 |
+
+如果另一台 GPU 不是 RTX 50 系列，請先查 CUDA capability：
+
+```powershell
+conda run -n qwen3-tts-fa2-test python -c "import torch; print(torch.cuda.get_device_name(0)); print(torch.cuda.get_device_capability(0))"
+```
+
+常見對應：
+
+| capability | `FLASH_ATTN_CUDA_ARCHS` |
+|---|---|
+| `(8, 0)` | `80` |
+| `(8, 6)` | `86` |
+| `(8, 9)` | `89` |
+| `(9, 0)` | `90` |
+| `(12, 0)` | `120` |
+
+## Conda 環境
+
+本專案故意拆成兩個環境，避免 ASR 依賴與 TTS + FA2 互相干擾。
+
+| env | 用途 |
+|---|---|
+| `qwen3-tts-fa2-test` | TTS、Gradio demo、TTS HTTP API、FlashAttention2 |
+| `qwen3-asr` | ASR worker |
+
+## 一鍵安裝 TTS + FA2
+
+只準備 TTS + FA2：
 
 ```cmd
 install_and_build.cmd
 ```
 
-如果 `F:\fa283` 裡已經有編好的產物，可以跳過重新建置。  
-If `F:\fa283` already contains built artifacts, you can skip rebuilding.
+如果 `F:\fa283` 已經有 build 成果，可跳過編譯：
 
 ```cmd
 install_and_build.cmd -SkipBuild
 ```
 
-如果你希望安裝驗證完就直接啟動背景服務，可以加 `-Launch`。  
-If you want the background service to start immediately after install and verification, add `-Launch`.
+如果安裝後要立刻啟動 TTS：
 
 ```cmd
 install_and_build.cmd -Launch
-install_and_build.cmd -SkipBuild -Launch
 ```
 
-這個流程目前預設使用下列值。  
-This workflow currently uses the following defaults.
+注意：`-Launch` 啟動的是 TTS UI，不是 ASR + TTS 統一 UI。統一 UI 請用 `start_ASR_TTS.cmd`。
 
-- Conda env: `qwen3-tts-fa2-test`  
-  Conda env: `qwen3-tts-fa2-test`
-- FlashAttention version: `2.8.3`  
-  FlashAttention version: `2.8.3`
-- Build repo: `F:\fa283`  
-  Build repo: `F:\fa283`
-- GPU id: `1`  
-  GPU id: `1`
-- Checkpoint: `Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice`  
-  Checkpoint: `Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice`
+## 一鍵安裝 TTS + ASR
 
-### 2. 啟動服務
-### 2. Start the Service
+如果要準備完整的 TTS + ASR 路線，使用獨立入口：
 
-平常使用直接執行下面這支。  
-For normal use, run this script.
+```cmd
+install_and_build+TTS_ASR.cmd
+```
+
+這會先執行 TTS + FA2 安裝建置，再建立 `qwen3-asr` 環境。
+
+如果 `F:\fa283` 已經有 build 成果，可跳過 TTS 的 FA2 編譯：
+
+```cmd
+install_and_build+TTS_ASR.cmd -SkipBuild
+```
+
+如果安裝後要立刻啟動 TTS：
+
+```cmd
+install_and_build+TTS_ASR.cmd -Launch
+```
+
+注意：`-Launch` 仍只啟動 TTS UI。完整 ASR + TTS 統一 UI 請在安裝後執行 `start_ASR_TTS.cmd`。
+
+## 手動建立 ASR 環境
+
+如果你之前沒有用 `install_and_build+TTS_ASR.cmd`，可單獨執行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\create_qwen3_asr_env.ps1
+```
+
+這會建立或更新 `qwen3-asr`，安裝 PyTorch CUDA stack 與 `qwen-asr`，並寫入 log：
+
+```text
+logs\create_qwen3_asr_env.log
+```
+
+## 啟動與停止
+
+啟動純 TTS：
 
 ```cmd
 start_TTS.cmd
 ```
 
-這個版本是背景啟動。  
-This version starts the service in the background.
-
-- 啟動後可以把 `cmd` 視窗關掉。  
-  You can close the `cmd` window after startup.
-- Web UI 預設位址是 `http://127.0.0.1:8000`。  
-  The default Web UI address is `http://127.0.0.1:8000`.
-- 最新執行紀錄會寫到 `logs\qwen3_tts_latest.log`。  
-  The latest runtime log is written to `logs\qwen3_tts_latest.log`.
-
-### 3. 停止服務
-### 3. Stop the Service
-
-要停止背景服務時執行下面這支。  
-Run the script below to stop the background service.
+停止純 TTS：
 
 ```cmd
 stop.cmd
 ```
 
-## 常用參數
-## Common Options
+啟動 ASR + TTS 統一 UI：
 
-只驗證 FA2，不啟動 Web UI。  
-Verify FA2 only, without starting the Web UI.
+```cmd
+start_ASR_TTS.cmd
+```
+
+停止 ASR + TTS 統一 UI：
+
+```cmd
+stop_ASR_TTS.cmd
+```
+
+可覆蓋模型、GPU 或 port，例如：
+
+```cmd
+start_TTS.cmd -GpuId 0 -Checkpoint "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+start_ASR_TTS.cmd -TtsGpuId 0 -AsrGpuId 0 -UiPort 7200 -AsrPort 7201
+```
+
+## 確認 FA2 真的啟用
+
+執行：
 
 ```cmd
 start_TTS.cmd -VerifyOnly
 ```
 
-跳過模型層級驗證，加快啟動。  
-Skip model-level verification to speed up startup.
-
-```cmd
-start_TTS.cmd -SkipModelAttnCheck
-```
-
-指定不同 GPU。  
-Select a different GPU.
-
-```cmd
-start_TTS.cmd -GpuId 0
-```
-
-指定不同模型或 checkpoint。  
-Select a different model or checkpoint.
-
-```cmd
-start_TTS.cmd -Checkpoint "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
-```
-
-## 如何確認真的有開到 FA2
-## How to Confirm FA2 Is Actually Enabled
-
-最可靠的方式不是看體感速度，而是看驗證輸出。  
-The most reliable method is not perceived speed, but verification output.
-
-執行下面指令後，應該看到這些關鍵行。  
-After running the command below, you should see these key lines.
-
-```cmd
-start_TTS.cmd -VerifyOnly
-```
+應看到類似：
 
 ```text
 fa2_available_before_load= True
@@ -153,264 +171,176 @@ model_attn= flash_attention_2
 layer0_attn= flash_attention_2
 ```
 
-判讀方式如下。  
-Interpret them as follows.
+解讀：
 
-- `fa2_available_before_load= True`：環境裡的 FA2 套件與 metadata 可用。  
-  `fa2_available_before_load= True`: the FA2 package and metadata are available in the environment.
-- `param_dtype= torch.bfloat16`：模型載入時使用了正確的 dtype。  
-  `param_dtype= torch.bfloat16`: the model was loaded with the expected dtype.
-- `model_attn= flash_attention_2`：模型設定明確指定使用 FA2。  
-  `model_attn= flash_attention_2`: the model config explicitly selected FA2.
-- `layer0_attn= flash_attention_2`：實際 attention layer 也走 FA2 路徑。  
-  `layer0_attn= flash_attention_2`: the real attention layer is also using the FA2 path.
+| 行 | 意義 |
+|---|---|
+| `fa2_available_before_load=True` | `flash_attn` package 與 metadata 可被 `transformers` 找到 |
+| `param_dtype=torch.bfloat16` | 模型用預期 dtype 載入 |
+| `model_attn=flash_attention_2` | 模型 config 選到 FA2 |
+| `layer0_attn=flash_attention_2` | 實際 attention layer 也走 FA2 |
 
-只要後面兩行有出來，就不是只有「套件裝了」，而是模型真的用 FA2 載入。  
-If the last two lines appear, it means the model is not merely installed with the package, but actually loaded with FA2.
+只看到 `flash_attn import OK` 不夠，必須看模型層級的 `model_attn` 與 `layer0_attn`。
 
-## 實際可用路線
-## Working Route
+## 如何做合適的 flash-attn wheel
 
-下面是目前已經跑通的完整流程。  
-Below is the complete workflow that has already been made to work.
+`flash-attn` wheel 必須匹配這些條件：
 
-### Step 1. 建立 baseline 環境
-### Step 1. Create the Baseline Environment
+| 條件 | 本專案預設 |
+|---|---|
+| Python ABI | `cp312` |
+| 平台 | `win_amd64` |
+| Torch CUDA | `cu128` |
+| CUDA Toolkit | `12.8` |
+| GPU arch | 預設 `120` |
+| flash-attn tag | `v2.8.3` |
 
-使用下列腳本建立 `qwen3-tts-fa2-test`。  
-Use the following script to create `qwen3-tts-fa2-test`.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File ".\tools\create_qwen3_tts_fa2_test.ps1" -Mode baseline
-```
-
-這一步會準備 Python、Torch cu128、`qwen-tts` 與基本 build 工具。  
-This step prepares Python, Torch cu128, `qwen-tts`, and the basic build tools.
-
-### Step 2. 建置 `flash-attn`
-### Step 2. Build `flash-attn`
-
-使用下列腳本在 Windows 上編譯 `flash-attn`。  
-Use the following script to compile `flash-attn` on Windows.
+預設 build：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File ".\tools\build_flashattn_qwen3_fa2_sm120.ps1"
+powershell -ExecutionPolicy Bypass -File .\tools\build_flashattn_qwen3_fa2_sm120.ps1
 ```
 
-這條路線目前是針對 `sm_120`、Python 3.12、Torch cu128、CUDA 12.8。  
-This route currently targets `sm_120`, Python 3.12, Torch cu128, and CUDA 12.8.
+為不同 GPU arch build：
 
-成功後，關鍵產物會出現在下列位置。  
-After a successful build, the key artifact appears at the location below.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\build_flashattn_qwen3_fa2_sm120.ps1 `
+  -RepoDir F:\fa283 `
+  -EnvName qwen3-tts-fa2-test `
+  -FlashAttnTag v2.8.3 `
+  -FlashAttnCudaArchs 89
+```
+
+build 成功後 wheel 會在：
+
+```text
+F:\fa283\dist\*.whl
+```
+
+同時會產生關鍵 `.pyd`：
 
 ```text
 F:\fa283\build\lib.win-amd64-cpython-312\flash_attn_2_cuda.cp312-win_amd64.pyd
 ```
 
-### Step 3. 手動安裝到環境
-### Step 3. Manually Install into the Environment
+## 為什麼不只 pip install wheel
 
-目前真正可用的做法不是等 wheel 自己處理，而是手動把必要內容放進 target env。  
-The currently working approach is not to rely on a wheel alone, but to manually place the required contents into the target environment.
+Windows 上本專案目前最穩的安裝方式是「build wheel，再手動放置可用 artifacts」。`install_and_build.cmd` 內部會把下列項目放進 `qwen3-tts-fa2-test` 的 `site-packages`：
 
-需要放進 `site-packages` 的內容如下。  
-The following items need to be placed into `site-packages`.
+```text
+flash_attn/
+hopper/
+flash_attn_2_cuda.cp312-win_amd64.pyd
+flash_attn-2.8.3.dist-info/
+```
 
-- `flash_attn/`  
-  `flash_attn/`
-- `hopper/`  
-  `hopper/`
-- `flash_attn_2_cuda.cp312-win_amd64.pyd`  
-  `flash_attn_2_cuda.cp312-win_amd64.pyd`
-- `flash_attn-2.8.3.dist-info/`  
-  `flash_attn-2.8.3.dist-info/`
+這段邏輯在：
 
-目前這個手動安裝步驟已整合在 `install_and_build.cmd` 裡。  
-This manual installation step is already integrated into `install_and_build.cmd`.
+```text
+tools\install_and_build_fa2.ps1
+```
 
-### Step 4. 啟動前補齊 DLL 路徑
-### Step 4. Add DLL Paths Before Startup
+`dist-info` 很重要，因為 `transformers.utils.is_flash_attn_2_available()` 需要 package metadata 才會承認 FA2 可用。
 
-Windows 上 `.pyd` 是否能正常載入，常常還取決於 PATH 裡是否包含必要 DLL 目錄。  
-On Windows, whether the `.pyd` loads correctly often also depends on whether PATH contains the required DLL directories.
+如果你只想測試一般 wheel 安裝，可用：
 
-目前啟動腳本會自動補這些路徑。  
-The current startup script adds these paths automatically.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\install_fa2_wheel_test.ps1 -FlashAttnWheelPath F:\fa283\dist\your_wheel.whl
+```
 
-- `torch\Lib\site-packages\torch\lib`  
-  `torch\Lib\site-packages\torch\lib`
-- `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin`  
-  `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin`
-- SoX 安裝目錄  
-  The SoX installation directory
+但正式復現仍建議跑：
 
-### Step 5. 模型層級驗證
-### Step 5. Model-Level Verification
+```cmd
+install_and_build.cmd
+```
 
-啟動腳本會在正常啟動前先做 FA2 檢查，必要時會載一次模型，把結果印出來。  
-Before normal startup, the launch script performs FA2 checks and, when needed, loads the model once to print the result.
+## 重要檔案
 
-這也是為什麼現在每次正常啟動時都能看到 `model_attn= flash_attention_2`。  
-This is why every normal launch can now print `model_attn= flash_attention_2`.
-
-## 主要檔案
-## Main Files
-
-根目錄常用入口如下。  
-These are the main entry points in the repository root.
-
-- `install_and_build.cmd`：一鍵建立、安裝、驗證，必要時可直接啟動。  
-  `install_and_build.cmd`: one-click create, install, verify, and optionally launch.
-- `start_TTS.cmd`：背景啟動 Qwen3-TTS FA2。  
-  `start_TTS.cmd`: start Qwen3-TTS FA2 in the background.
-- `stop.cmd`：停止背景服務。  
-  `stop.cmd`: stop the background service.
-
-`tools\` 目錄內的重要腳本如下。  
-The important scripts under `tools\` are listed below.
-
-- `tools\install_and_build_fa2.ps1`：一鍵安裝與建置的實作。  
-  `tools\install_and_build_fa2.ps1`: implementation behind the one-click install/build flow.
-- `tools\start_qwen3_tts_fa2_test_gpu1.ps1`：FA2 驗證與前台啟動主腳本。  
-  `tools\start_qwen3_tts_fa2_test_gpu1.ps1`: main script for FA2 verification and foreground launch.
-- `tools\start_qwen3_tts_fa2_background.ps1`：背景啟動器。  
-  `tools\start_qwen3_tts_fa2_background.ps1`: background launcher.
-- `tools\run_qwen3_tts_fa2_background.ps1`：背景 worker。  
-  `tools\run_qwen3_tts_fa2_background.ps1`: background worker.
-- `tools\stop_qwen3_tts_fa2.ps1`：背景停止器。  
-  `tools\stop_qwen3_tts_fa2.ps1`: background stopper.
-- `tools\create_qwen3_tts_fa2_test.ps1`：建立 baseline env。  
-  `tools\create_qwen3_tts_fa2_test.ps1`: create the baseline environment.
-- `tools\build_flashattn_qwen3_fa2_sm120.ps1`：Windows `sm_120` build script。  
-  `tools\build_flashattn_qwen3_fa2_sm120.ps1`: Windows `sm_120` build script.
-
-## 版本資訊
-## Version Matrix
-
-### 系統與工具版本
-### System and Tool Versions
-
-- OS: Windows  
-  OS: Windows
-- GPU: NVIDIA GeForce RTX 5070 Ti  
-  GPU: NVIDIA GeForce RTX 5070 Ti
-- GPU capability: `sm_120`  
-  GPU capability: `sm_120`
-- CUDA Toolkit: `12.8`  
-  CUDA Toolkit: `12.8`
-- `nvcc`: `12.8.93`  
-  `nvcc`: `12.8.93`
-- MSVC compiler: `19.50.35725`  
-  MSVC compiler: `19.50.35725`
-- Git: `2.50.1.windows.1`  
-  Git: `2.50.1.windows.1`
-- SoX CLI: `14.4.2`  
-  SoX CLI: `14.4.2`
-
-### Python 與套件版本
-### Python and Package Versions
-
-| 套件 Package | 版本 Version |
+| 檔案 | 用途 |
 |---|---|
-| Python | `3.12.13` |
-| qwen-tts | `0.1.1` |
-| flash_attn | `2.8.3` |
-| transformers | `4.57.3` |
-| huggingface-hub | `0.36.2` |
-| tokenizers | `0.22.2` |
-| safetensors | `0.7.0` |
-| accelerate | `1.12.0` |
-| torch | `2.10.0+cu128` |
-| torchvision | `0.25.0+cu128` |
-| torchaudio | `2.10.0+cu128` |
-| triton-windows | `3.6.0.post26` |
-| gradio | `6.9.0` |
-| fastapi | `0.135.1` |
-| starlette | `0.52.1` |
-| uvicorn | `0.42.0` |
-| numpy | `2.3.5` |
-| scipy | `1.17.1` |
-| librosa | `0.11.0` |
-| soundfile | `0.13.1` |
-| soxr | `1.0.0` |
-| numba | `0.64.0` |
-| llvmlite | `0.46.0` |
-| pip | `26.0.1` |
-| setuptools | `82.0.1` |
-| wheel | `0.46.3` |
-| packaging | `26.0` |
-| ninja | `1.13.0` |
+| `install_and_build.cmd` | 一鍵建立 TTS env、build/install FA2、驗證 |
+| `install_and_build+TTS_ASR.cmd` | 一鍵建立 TTS + FA2，並建立 ASR env |
+| `start_TTS.cmd` | 背景啟動 TTS UI |
+| `start_ASR_TTS.cmd` | 背景啟動 ASR worker + 統一 UI |
+| `stop.cmd` | 停止 TTS |
+| `stop_ASR_TTS.cmd` | 停止 ASR + TTS |
+| `tools\create_qwen3_tts_fa2_test.ps1` | 建立 TTS baseline env |
+| `tools\create_qwen3_asr_env.ps1` | 建立 ASR env |
+| `tools\build_flashattn_qwen3_fa2_sm120.ps1` | build flash-attn |
+| `tools\install_and_build_fa2.ps1` | 一鍵流程主邏輯 |
+| `tools\qwen3_asr_http_worker.py` | ASR HTTP worker |
+| `tools\qwen3_asr_tts_suite.py` | 統一 Gradio UI |
+| `tools\qwen3_tts_http_api.py` | TTS HTTP API |
 
-## Log 位置
-## Log Locations
+## Logs
 
-所有 `.log` 檔都集中在 `logs\` 目錄。  
-All `.log` files are kept under the `logs\` directory.
+常用 log：
 
-最常用的是下面兩個。  
-The two most useful logs are the following.
-
-- `logs\qwen3_tts_latest.log`：目前或最近一次背景執行的 log。  
-  `logs\qwen3_tts_latest.log`: the current or most recent background runtime log.
-- `logs\install_and_build_fa2.log`：一鍵安裝與建置流程的完整紀錄。  
-  `logs\install_and_build_fa2.log`: the full log of the one-click install/build workflow.
+```text
+logs\install_and_build_fa2.log
+logs\build_flashattn_qwen3_fa2_sm120.log
+logs\create_qwen3_asr_env.log
+logs\qwen3_tts_latest.log
+logs\qwen3_asr_tts_latest.log
+```
 
 ## 常見問題
-## FAQ
 
-### Q1. 看到 `You are attempting to use Flash Attention 2 without specifying a torch dtype.` 是不是代表沒開到 FA2？
-### Q1. Does `You are attempting to use Flash Attention 2 without specifying a torch dtype.` mean FA2 is not enabled?
+### README 之前寫 0.6B，現在到底用哪個？
 
-不是。  
-No.
+以目前腳本為準：預設是 `1.7B`。
 
-這是 `transformers` 的 warning，不等於 FA2 沒有啟用。  
-This is a `transformers` warning and does not mean FA2 is disabled.
+TTS 預設：
 
-真正要看的是 `model_attn= flash_attention_2` 和 `layer0_attn= flash_attention_2`。  
-What really matters is whether `model_attn= flash_attention_2` and `layer0_attn= flash_attention_2` appear.
+```text
+Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice
+```
 
-### Q2. 為什麼開了 FA2 之後速度看起來沒有明顯變快？
-### Q2. Why does it still look slow even after enabling FA2?
+ASR 預設：
 
-TTS 的總耗時不只來自 attention。  
-The total TTS time is not determined by attention alone.
+```text
+Qwen/Qwen3-ASR-1.7B
+```
 
-還包含模型載入、tokenizer、聲學 token、vocoder、Web UI 與 I/O。  
-It also includes model loading, tokenizer work, acoustic tokens, vocoder time, Web UI overhead, and I/O.
+如果要改回 0.6B，可在啟動時指定：
 
-對 `0.6B`、短句、`batch=1` 這種情境，FA2 的加速通常不會像長上下文 LLM 那麼明顯。  
-For `0.6B`, short text, and `batch=1`, FA2 gains are usually less dramatic than in long-context LLM workloads.
+```cmd
+start_TTS.cmd -Checkpoint "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+start_ASR_TTS.cmd -TtsCheckpoint "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice" -AsrCheckpoint "Qwen/Qwen3-ASR-0.6B"
+```
 
-### Q3. `start_TTS.cmd` 啟動後把視窗關掉可以嗎？
-### Q3. Can I close the window after launching `start_TTS.cmd`?
+### 啟動 ASR + TTS 時說找不到 qwen3-asr？
 
-可以。  
-Yes.
+先建立 ASR env：
 
-這個版本是背景啟動，服務會留在背景執行。  
-This version launches the service in the background, so it keeps running after the window is closed.
+```cmd
+install_and_build+TTS_ASR.cmd
+```
 
-### Q4. `install_and_build.cmd` 需要注意什麼？
-### Q4. What should I watch out for when running `install_and_build.cmd`?
+或：
 
-如果目標 env 裡的 `flash_attn_2_cuda*.pyd` 被占用，腳本會先停止使用同一個 env 的 Python 程序。  
-If `flash_attn_2_cuda*.pyd` in the target environment is locked, the script will stop Python processes using that same environment.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\create_qwen3_asr_env.ps1
+```
 
-這是為了避免 `.pyd` 無法覆蓋而導致安裝失敗。  
-This is done to prevent installation failures caused by an in-use `.pyd` file.
+### 可以關掉 start_TTS.cmd 的視窗嗎？
 
-如果你有其他也在用 `qwen3-tts-fa2-test` 的背景程式，請先知道它們可能會被關掉。  
-If you have other background programs using `qwen3-tts-fa2-test`, be aware that they may be terminated first.
+可以。它啟動的是背景服務，URL 印出後可以關閉視窗。停止請用 `stop.cmd`。
 
-## 最短結論
-## Short Conclusion
+### SoX 找不到怎麼辦？
 
-目前這個 repo 已經把「Windows 上讓 Qwen3-TTS 真正用上 FA2」需要的建置、手動安裝、啟動與驗證流程整理好了。  
-This repository now packages the build, manual install, launch, and verification steps required to make Qwen3-TTS genuinely use FA2 on Windows.
+安裝 SoX，並確認 `sox.exe` 在 PATH 中，或修改啟動腳本裡的 `$soxDir`。
 
-如果你只想操作，先跑 `install_and_build.cmd`，之後平常用 `start_TTS.cmd`，需要停止時用 `stop.cmd`。  
-If you only want the operational path, run `install_and_build.cmd` first, then use `start_TTS.cmd` for normal operation and `stop.cmd` when you want to stop it.
-=======
-windows fa2
->>>>>>> origin/main
+### 另一台機器路徑不是 F:\fa283 怎麼辦？
+
+指定 `-RepoDir`：
+
+```cmd
+install_and_build.cmd -RepoDir D:\build\fa283
+```
+
+或直接呼叫 build script：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\build_flashattn_qwen3_fa2_sm120.ps1 -RepoDir D:\build\fa283
+```

@@ -68,7 +68,7 @@ if ($Mode -eq "baseline") {
     Write-Host ""
     Write-Host "To launch baseline demo later:" -ForegroundColor Yellow
     Write-Host "conda activate $envName"
-    Write-Host 'qwen-tts-demo Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice --ip 127.0.0.1 --port 8000 --no-flash-attn'
+    Write-Host 'qwen-tts-demo Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice --ip 127.0.0.1 --port 7100 --no-flash-attn'
     exit 0
 }
 
@@ -90,7 +90,7 @@ if ($Mode -eq "wheel") {
     Write-Step "Wheel mode complete"
     Write-Host "Test with:" -ForegroundColor Yellow
     Write-Host "conda activate $envName"
-    Write-Host 'qwen-tts-demo Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice --ip 127.0.0.1 --port 8000'
+    Write-Host 'qwen-tts-demo Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice --ip 127.0.0.1 --port 7100'
     exit 0
 }
 

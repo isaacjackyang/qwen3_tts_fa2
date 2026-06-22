@@ -1,5 +1,5 @@
 param(
-    [string]$Checkpoint = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+    [string]$Checkpoint = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
     [string]$GpuId = "1",
     [switch]$DeepVerify,
     [switch]$VerifyOnly,
@@ -38,6 +38,9 @@ if (-not (Get-Command sox -ErrorAction SilentlyContinue)) {
 }
 
 $env:CUDA_VISIBLE_DEVICES = $GpuId
+
+# Clear PYTHONPATH to prevent Hermes venv from interfering with conda env
+$env:PYTHONPATH = ""
 
 function Invoke-EnvPython {
     param([string]$ScriptText)
@@ -122,17 +125,17 @@ Write-Host "Launching Qwen3-TTS FA2 test environment..." -ForegroundColor Cyan
 Write-Host "Conda env: qwen3-tts-fa2-test" -ForegroundColor Cyan
 Write-Host "GPU: CUDA_VISIBLE_DEVICES=$env:CUDA_VISIBLE_DEVICES" -ForegroundColor Cyan
 Write-Host "FlashAttention2: enabled" -ForegroundColor Cyan
-Write-Host "URL: http://127.0.0.1:8000" -ForegroundColor Cyan
+Write-Host "URL: http://127.0.0.1:7100" -ForegroundColor Cyan
 Write-Host "Checkpoint: $Checkpoint" -ForegroundColor Cyan
 Write-Host "Model-level FA2 check: $(if ($SkipModelAttnCheck) { 'skipped by flag' } else { 'enabled' })" -ForegroundColor Cyan
 Write-Host "First startup may take a few minutes while the model loads." -ForegroundColor Yellow
 if (-not $SkipModelAttnCheck) {
     Write-Host "Startup includes one extra model load to print model_attn and layer0_attn." -ForegroundColor Yellow
 }
-Write-Host "If the window looks idle, open http://127.0.0.1:8000 in your browser." -ForegroundColor Yellow
+Write-Host "If the window looks idle, open http://127.0.0.1:7100 in your browser." -ForegroundColor Yellow
 Write-Host "Press Ctrl+C in this window to stop the server." -ForegroundColor Yellow
 
 & $condaExe run --live-stream -n qwen3-tts-fa2-test -- qwen-tts-demo `
     $Checkpoint `
     --ip 127.0.0.1 `
-    --port 8000
+    --port 7100

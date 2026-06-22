@@ -7,15 +7,14 @@ $ErrorActionPreference = "Stop"
 
 $toolsRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $toolsRoot
-$startScript = Join-Path $toolsRoot "start_qwen3_tts_fa2_test_gpu1.ps1"
+$startScript = Join-Path $toolsRoot "start_qwen3_asr_tts_suite.ps1"
 $workerScript = Join-Path $toolsRoot "run_qwen3_tts_fa2_background.ps1"
 $logsDir = Join-Path $projectRoot "logs"
-$stateFile = Join-Path $logsDir "qwen3_tts_state.json"
-$pidFile = Join-Path $logsDir "qwen3_tts.pid"
-$latestLog = Join-Path $logsDir "qwen3_tts_latest.log"
-$port = 7100
+$stateFile = Join-Path $logsDir "qwen3_asr_tts_state.json"
+$pidFile = Join-Path $logsDir "qwen3_asr_tts.pid"
+$latestLog = Join-Path $logsDir "qwen3_asr_tts_latest.log"
+$port = 7200
 $PassThroughArgs = @($PassThroughArgs | Where-Object { $null -ne $_ })
-$verifyOnlyRequested = $PassThroughArgs -contains "-VerifyOnly"
 
 function Get-ProcessInfo {
     param([int]$ProcessId)
@@ -50,7 +49,7 @@ if (Test-Path $stateFile) {
         if ($null -ne $state.Pid) {
             $existingProcess = Get-ProcessInfo -ProcessId ([int]$state.Pid)
             if ($null -ne $existingProcess) {
-                Write-Host "Qwen3-TTS FA2 is already running in the background." -ForegroundColor Yellow
+                Write-Host "Qwen3 ASR + TTS suite is already running in the background." -ForegroundColor Yellow
                 Write-Host "PID: $($state.Pid)" -ForegroundColor Yellow
                 Write-Host "URL: http://127.0.0.1:$port" -ForegroundColor Yellow
                 if ($null -ne $state.LogFile) {
@@ -66,7 +65,7 @@ if (Test-Path $stateFile) {
     Remove-StateFiles
 }
 
-if ((-not $verifyOnlyRequested) -and (Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue)) {
+if (Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue) {
     $connection = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue | Select-Object -First 1
     $processInfo = $null
     if ($null -ne $connection) {
@@ -76,7 +75,6 @@ if ((-not $verifyOnlyRequested) -and (Get-NetTCPConnection -LocalPort $port -Err
     if ($null -ne $processInfo) {
         $name = ($processInfo.Name | Out-String).Trim()
         Write-Host "Port $port is already in use by PID $($connection.OwningProcess) ($name)." -ForegroundColor Red
-        Write-Host "Please stop that process first, or run stop.cmd if it is the existing Qwen3-TTS service." -ForegroundColor Red
     } else {
         Write-Host "Port $port is already in use." -ForegroundColor Red
     }
@@ -84,7 +82,7 @@ if ((-not $verifyOnlyRequested) -and (Get-NetTCPConnection -LocalPort $port -Err
 }
 
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$logFile = Join-Path $logsDir "qwen3_tts_$timestamp.log"
+$logFile = Join-Path $logsDir "qwen3_asr_tts_$timestamp.log"
 
 $header = @(
     "[$(Get-Date -Format s)] Launch requested.",
@@ -139,8 +137,8 @@ if ($process.HasExited) {
     exit 1
 }
 
-Write-Host "Qwen3-TTS FA2 started in the background." -ForegroundColor Green
+Write-Host "Qwen3 ASR + TTS suite started in the background." -ForegroundColor Green
 Write-Host "PID: $($process.Id)" -ForegroundColor Cyan
 Write-Host "URL: http://127.0.0.1:$port" -ForegroundColor Cyan
 Write-Host "Latest log: $latestLog" -ForegroundColor Cyan
-Write-Host "Run stop.cmd to stop the service." -ForegroundColor Yellow
+Write-Host "Run stop_ASR_TTS.cmd to stop the service." -ForegroundColor Yellow
